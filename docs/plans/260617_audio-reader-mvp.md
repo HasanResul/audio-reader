@@ -1,7 +1,7 @@
 ---
 status: active
 created: 260617
-updated: 260617
+updated: 260617_phase2
 ---
 
 # Audio Reader MVP — Local TTS Read-Aloud for Brave
@@ -120,3 +120,34 @@ Quality-vs-hosted-demo: **user signed off (260617)** — `af_heart` samples judg
 - **Fixed: audio kept playing after page reload** (bar gone, sound continued). Root cause: the stop-on-navigation listener keyed off `changeInfo.url`, which (a) doesn't change on a reload and (b) is only delivered with the `"tabs"` permission, which the extension doesn't hold — so it never fired. Switched to `changeInfo.status === "loading"`, which fires on both reload and navigation and needs no extra permission. Tab-close cleanup (`tabs.onRemoved`) was already correct.
 
 **Validation still owed (user, in Brave):** load unpacked → select paragraph → `Cmd+Shift+S` → hear narration; pause/resume, scrub, speed, close all work; long multi-paragraph selection starts before full synthesis; changing voice/endpoint in Settings takes effect without reinstall.
+
+### Phase 2 — Read whole article (260617) — COMPLETE ✓ (user-verified in Brave)
+
+**Outcome:** Article extraction via Readability.js integrated into the extension. Two new triggers: "Read this article" context menu + keyboard shortcut (`Option+Shift+A` Mac / `Ctrl+Shift+A` Windows; rebindable). Extraction feeds text to the existing Phase 1 play pipeline. Graceful fallback toast when extraction fails. User loaded it unpacked and confirmed selection-reading and article-reading both work and play through the same control bar.
+
+**Design decisions (locked with user):**
+- **Triggers:** Both keyboard shortcut (`Option+Shift+A`) + context menu (page-level "Read this article"), matching Phase 1's dual-trigger pattern. `Cmd+Shift+A` was avoided on Mac because it opens Brave's tab search.
+- **Fallback on extraction failure:** Toast message prompting the user to use `Cmd+Shift+S` for manual selection (no full-page fallback, no LLM). Chosen by user over full-page-text fallback.
+- **Extraction library:** Mozilla Readability.js (same engine as Firefox Reader View). Runs in the content-script (isolated-world) context. No LLM call, no network extraction.
+
+**Implementation:**
+- **New files:**
+  - `extension/Readability.js` (88.8 KB, Apache-2.0) — vendored from github.com/mozilla/readability. Loaded as a content script at `document_idle` before `content.js`. Defines `Readability` in the isolated world; the Node `module.exports` branch is inert in the browser.
+  - `extension/extractor.js` — wrapper `extractArticle()`: clones the DOM (`document.cloneNode(true)`), runs Readability, converts the article HTML to plain text, applies a 100-char minimum threshold, returns `{ success, text, title }` or `{ success: false, reason }`.
+- **Modified files:**
+  - `extension/manifest.json` — added `Readability.js` + `extractor.js` to `content_scripts`; added the `read-article` command.
+  - `extension/background.js` — added "Read this article" context menu (page context); routed both the `read-article` command and menu item through a shared `readArticle(tabId)` helper; `extractArticleFromTab(tabId)` runs `extractArticle()` via `chrome.scripting.executeScript` in the isolated world (sees the content-script-defined function).
+  - `extension/offscreen.js` — **bug fix, see below.**
+
+- **Reused from Phase 1:** `startReading()`, offscreen player, in-page Shadow-DOM control bar, all config/persistence/cleanup. Extraction is a pure pre-processor — no parallel pipeline.
+
+**Bug found + fixed during testing (260617):** After reading an article, stopping it, then triggering a new (selection or article) read, the new read **resumed from the old position / kept the old audio** — and a read could bleed across tab switches. Root cause: `offscreen.js` `start()` called `stop()` but never aborted the previous streaming `fetch`, and never reset `audio.currentTime`, so the old MediaSource stream/position could carry into the new session. Fix: added an `AbortController` that aborts the prior fetch on every new `start()` (with an `AbortError` guard so the cancel isn't reported as a server error), and an explicit `audio.currentTime = 0` reset when the new source attaches. User re-verified: selection→article→selection and cross-tab reads now each start fresh.
+
+**Validation results (user-verified in Brave):**
+- Selection reading still works after the Readability content scripts were added (no interference). ✓
+- "Read this article" extracts and narrates the main content through the same control bar. ✓
+- After the offscreen fix: consecutive reads (selection ↔ article) and cross-tab reads each start cleanly from the beginning. ✓
+- Graceful fallback path present for poorly-extracting pages (manual-selection toast). ✓
+- Per-page extraction-quality sampling across news/blog/X was not exhaustively logged this session; the core loop + fallback are confirmed working. Future sessions can sample more pages if extraction tuning is ever needed.
+
+**Plan status:** All three phases (0/1/2) implemented and user-verified. Engine-swap config hook carried (not built) as planned. Plan kept `active` only pending any further extraction-quality sampling; functionally the MVP is complete.

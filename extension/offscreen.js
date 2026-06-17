@@ -20,6 +20,7 @@ let queue = [];          // pending Uint8Array chunks awaiting append
 let streamDone = false;  // network stream fully read
 let objectUrl = null;
 let started = false;     // playback kicked off for the current session
+let abortController = null; // abort previous fetch if new read starts
 
 // --- State reporting ------------------------------------------------------
 
@@ -96,6 +97,12 @@ function readLoop(reader) {
 async function start({ text, serverUrl, voice, speed }) {
   stop();
 
+  // Abort any previous fetch that might still be in progress
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+  }
+
   const base = (serverUrl || "").replace(/\/+$/, "");
   const speechUrl = base + "/v1/audio/speech";
 
@@ -107,6 +114,7 @@ async function start({ text, serverUrl, voice, speed }) {
   mediaSource = new MediaSource();
   objectUrl = URL.createObjectURL(mediaSource);
   audio.src = objectUrl;
+  audio.currentTime = 0;  // Explicitly reset playback position
   desiredRate = speed || 1.0;
   audio.playbackRate = desiredRate;
   started = false;
@@ -126,6 +134,7 @@ async function start({ text, serverUrl, voice, speed }) {
   streamDone = false;
   queue = [];
 
+  abortController = new AbortController();
   let resp;
   try {
     resp = await fetch(speechUrl, {
@@ -138,9 +147,11 @@ async function start({ text, serverUrl, voice, speed }) {
         response_format: "mp3",
         stream: true,
         speed: 1.0
-      })
+      }),
+      signal: abortController.signal
     });
   } catch (e) {
+    if (e.name === "AbortError") return;  // Fetch was cancelled, don't report error
     postState({ error: "Can't reach the TTS server at " + base + ". Is it running?" });
     return;
   }

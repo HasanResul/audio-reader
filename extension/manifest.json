@@ -11,7 +11,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["Readability.js", "extractor.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
@@ -19,6 +19,10 @@
     "read-selection": {
       "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
       "description": "Read the current selection aloud"
+    },
+    "read-article": {
+      "suggested_key": { "default": "Ctrl+Shift+A", "mac": "Option+Shift+A" },
+      "description": "Read the entire article on this page"
     }
   }
 }

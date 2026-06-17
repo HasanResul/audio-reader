@@ -68,6 +68,21 @@ async function getSelectionFromTab(tabId) {
   }
 }
 
+async function extractArticleFromTab(tabId) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        if (typeof extractArticle === "undefined") return null;
+        return extractArticle();
+      }
+    });
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 // --- Session lifecycle ----------------------------------------------------
 
 async function startReading(tabId, rawText) {
@@ -101,6 +116,20 @@ function stopSession({ hideBar = true } = {}) {
   session = null;
 }
 
+// Extract the page's main article and read it; fall back to a manual-selection
+// hint when extraction yields nothing usable. Shared by both article triggers.
+async function readArticle(tabId) {
+  const result = await extractArticleFromTab(tabId);
+  if (result && result.success) {
+    startReading(tabId, result.text);
+  } else {
+    toTab(tabId, {
+      type: "TOAST",
+      message: "Could not extract article. Use Cmd+Shift+S to read selected text instead."
+    });
+  }
+}
+
 // --- Triggers -------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -110,21 +139,33 @@ chrome.runtime.onInstalled.addListener(() => {
       title: "Read selection aloud",
       contexts: ["selection"]
     });
+    chrome.contextMenus.create({
+      id: "read-article",
+      title: "Read this article",
+      contexts: ["page"]
+    });
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "read-selection" && tab) {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab) return;
+  if (info.menuItemId === "read-selection") {
     startReading(tab.id, info.selectionText);
+  } else if (info.menuItemId === "read-article") {
+    readArticle(tab.id);
   }
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "read-selection") return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
-  const text = await getSelectionFromTab(tab.id);
-  startReading(tab.id, text);
+
+  if (command === "read-selection") {
+    const text = await getSelectionFromTab(tab.id);
+    startReading(tab.id, text);
+  } else if (command === "read-article") {
+    readArticle(tab.id);
+  }
 });
 
 // --- Message routing ------------------------------------------------------

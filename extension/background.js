@@ -183,6 +183,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "CONTROL") {
     if (msg.action === "stop") {
       stopSession();
+      // The bar can be visible without an active session (e.g. it's only showing
+      // the "select some text first" toast, which never sets `session`).
+      // stopSession() won't hide it in that case, so hide the requesting tab's
+      // bar directly — the close button must always work.
+      toTab(sender.tab.id, { type: "HIDE_PLAYER" });
     } else {
       toOffscreen({ type: "OFFSCREEN_CONTROL", action: msg.action, value: msg.value });
       // Persist speed so the next reading starts at the last-used speed.

@@ -1,0 +1,2 @@
+docs:
+  260617_audio-reader-design.md: Brave extension + local OpenAI-compatible TTS server; Kokoro default, Chatterbox quality mode (kind: design, status: draft)

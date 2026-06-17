@@ -1,0 +1,3 @@
+subdirs:
+  tts-models: TTS model landscape research for Apple Silicon narration
+  tts-tooling: tooling landscape — extensions, article extraction, overlay players, local TTS servers

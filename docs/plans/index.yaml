@@ -1,0 +1,2 @@
+docs:
+  260617_audio-reader-mvp.md: Brave extension + local OpenAI-compatible TTS server; phased Kokoro MVP (status: draft)

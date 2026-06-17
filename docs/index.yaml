@@ -1,0 +1,5 @@
+subdirs:
+  research: external-source synthesis by web-researcher (TTS models, read-aloud tooling)
+  notes: LLM-authored analysis/brainstorm/design notes
+  plans: implementation and research plans + impl logs
+  templates: canonical doc templates and their usage rules

@@ -148,6 +148,7 @@ Quality-vs-hosted-demo: **user signed off (260617)** — `af_heart` samples judg
 - "Read this article" extracts and narrates the main content through the same control bar. ✓
 - After the offscreen fix: consecutive reads (selection ↔ article) and cross-tab reads each start cleanly from the beginning. ✓
 - Graceful fallback path present for poorly-extracting pages (manual-selection toast). ✓
-- Per-page extraction-quality sampling across news/blog/X was not exhaustively logged this session; the core loop + fallback are confirmed working. Future sessions can sample more pages if extraction tuning is ever needed.
+- x.com (X/Twitter) extracts and reads correctly — verified by user. ✓
+- Exhaustive per-page extraction-quality sampling across many news/blog sites wasn't logged this session, but the representative cases (article page + X/Twitter) plus the fallback path are confirmed working. Future sessions can sample more pages if extraction tuning is ever needed.
 
-**Plan status:** All three phases (0/1/2) implemented and user-verified. Engine-swap config hook carried (not built) as planned. Plan kept `active` only pending any further extraction-quality sampling; functionally the MVP is complete.
+**Plan status:** All three phases (0/1/2) implemented and user-verified, including the X/Twitter representative case from the Validation list. Engine-swap config hook carried (not built) as planned. MVP is functionally complete.

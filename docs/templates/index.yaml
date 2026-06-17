@@ -1,0 +1,7 @@
+purpose: canonical templates for docs files
+docs:
+  index.yaml.template: template for subdirectory index.yaml files
+  plan.md.template: template for plan documents (frontmatter + concise body + impl log)
+  research.md.template: template for research reports by web-researcher (external sources, content-first)
+  note.md.template: template for analysis/brainstorm/design notes (kind frontmatter + content-first)
+  experiment.md.template: template for capability tests and benchmarks (one self-contained subdir per experiment)

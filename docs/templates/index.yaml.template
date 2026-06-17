@@ -1,0 +1,36 @@
+# How to use this template
+#
+# Every docs/ subdirectory has an index.yaml. The top-level docs/index.yaml
+# lists subdirectories only. Subdirectory index.yaml lists docs (and any
+# nested subdirs).
+#
+# Rules:
+# - Pure YAML. No markdown, no headings, no bullets.
+# - `purpose:` optional — omit if the dir name is self-evident.
+# - One line per entry: `filename: one-line summary`.
+# - **Summary length: ≤15 words.** Hard cap. The summary is a discoverability
+#   hook, not a replacement for reading the doc. If you can't say it in 15
+#   words, the doc title is wrong or you're trying to embed content that
+#   belongs in the doc itself.
+# - **Do NOT embed in the summary**: status update logs, cascading findings,
+#   numeric results, cross-references to other docs, multi-clause "**Update**:"
+#   blocks, or recommendation rationale. Those live in the doc's frontmatter
+#   and body. The index entry is a pointer, not a mirror.
+# - Include `(kind: X)` or `status: X` ONLY when non-default and load-bearing
+#   for discovery (e.g., a draft note, a superseded plan). Default kinds and
+#   active/completed status do not need to appear in the summary.
+# - Verdict-style summaries are encouraged for results/recommendation docs
+#   (e.g., "contextual-retrieval spike — FAIL; chunker bug was the real lift").
+# - Maintain proactively: when you touch a docs/ subdir, verify its index.yaml
+#   matches the actual contents and fix drift in the same task. If an entry
+#   has grown past 15 words, trim it — don't let bloat compound.
+# - Improve this template if you hit friction using it.
+#
+# Copy the block below into the target subdirectory as `index.yaml`.
+
+purpose: optional one-liner; omit if dir name is self-evident
+docs:
+  260424_example-doc.md: one-line summary
+  260423_another-doc.md: one-line summary
+subdirs:
+  nested-dir: one-line summary

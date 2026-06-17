@@ -1,0 +1,44 @@
+# How to use this template
+
+Copy to `docs/notes/YYMMDD_topic-slug.md`. Update `docs/notes/index.yaml`.
+
+Use for:
+- `kind: analyze` — assess a specific question, compare options, evaluate a tradeoff
+- `kind: brainstorm` — open exploration of a problem space, candidate ideas, hidden assumptions
+- `kind: design` — proposed architecture or approach, pre-plan, decision-shaping
+
+Audience: future LLMs, not humans. Terse, project-specific, no filler.
+
+Rules:
+- **Check `docs/notes/index.yaml` before creating.** If a related note exists, update it (bump `updated:`, append to Update Log) instead of creating a new file. Duplicate notes are how the system rots.
+- **No generic knowledge.** Save only what's project-specific, decision-shaping, or learned from this analysis. If a fact lives in LLM training data and won't go stale, omit.
+- **Content-first headings.** "Tradeoffs of Per-Project KGs" beats "Analysis". No "Background / Approach / Conclusion" ceremony.
+- **Status discipline.** `draft` = exploratory, claims unvalidated; `active` = decision-shaping, in use as reference; `superseded` = replaced (link to successor); `archived` = move to `docs/archive/`. Notes can launch directly at `active` if the underlying evidence is settled at write time AND no decisions are pending in the note (e.g. an ablation reporting finished n=80 + judged numbers, or a recommendation grounded in already-completed runs). Otherwise: `draft` first, promote later.
+- **Flag uncertainty inline.** Single-source claims, unverified hypotheses, "intuition only" — say so where the claim lives.
+- **Evolves freely until status promotes from `draft`.** After promotion, edit the body and add a one-line entry to Update Log.
+- **Improve this template** if you hit friction (missing field, awkward shape, unclear rule). Templates are ideation, not law.
+
+---
+
+```
+---
+status: draft
+kind: analyze | brainstorm | design
+date: YYMMDD
+updated: YYMMDD
+topic: one-line summary of what this note is about
+---
+
+# Note Title
+
+## <Content-first heading 1>
+
+## <Content-first heading 2>
+
+## Open Questions
+Bullet list. Empty if none.
+
+## Update Log
+(Omit until first revision after status promotion.)
+- YYMMDD: what changed and why
+```

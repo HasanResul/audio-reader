@@ -1,0 +1,51 @@
+# How to use this template
+
+Copy to `docs/plans/YYMMDD_plan-name.md`. Fill the sections below. Delete this header block in the copy.
+
+Rules:
+- **No implementation details.** No file paths, no function signatures, no library calls in the plan body. Implementer discovers those at build time. Steps describe *what*, not *how*.
+- **Plan body is immutable after work begins.** Do not edit Goal/Approach/Non-goals/References/Validation/Open Questions to match reality. Record divergence in Implementation Log instead.
+- **Non-goals cap scope.** LLMs over-build. State explicitly what NOT to do — adjacent refactors to skip, abstractions not to introduce, files not to touch. Cheap to write, prevents drift.
+- **References point, not prescribe.** List what's relevant; don't tell implementer what to do with each.
+- **Validation is the implementer's self-check before declaring done.** High-level — user-visible behavior, manual checks, smoke tests. Not test names or assertions. If you can't satisfy Validation, you're not done.
+- **Required sections must stay.** Goal, Approach, Non-goals, References, Validation, Open Questions, Implementation Log are required. Add other sections (Risks, Rollout, Dependencies, etc.) when they earn their place — but don't pad with empty ceremony.
+- **Status starts as `draft`.** Promote to `active` when work begins, `completed` when done, `abandoned` if dropped.
+- **Improve this template** if you hit friction using it.
+
+---
+
+```
+---
+status: draft
+created: YYMMDD
+updated: YYMMDD
+# outcome: <one-line headline> — set on terminal status only (completed / abandoned). Single most-load-bearing fact for the next session; saves rereading the Impl Log to learn whether the plan worked.
+---
+
+# Plan Title
+
+## Goal
+One paragraph. Why this plan exists, what success looks like.
+
+## Approach
+High-level steps. What to do, not how.
+
+## Non-goals
+What NOT to do in this plan. Adjacent cleanup to skip, abstractions not to introduce, files/areas not to touch. Empty if truly none, but think before leaving empty.
+
+## References
+Files, dirs, or docs the implementer should know about. One line each:
+`path/to/thing — why it matters`
+
+## Validation
+Implementer's self-check before declaring done. High-level — user-visible behavior, manual checks, smoke tests. Not specific test names. If you can't satisfy these, you're not done.
+
+## Open Questions
+Bullet list. Empty if none.
+
+## Implementation Log
+Append-only. Filled by implementer.
+- Deviations from Approach and why
+- Decisions made at build time that future readers need
+- Concise insights — what worked, what surprised, what to avoid
+```

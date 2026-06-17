@@ -1,0 +1,59 @@
+# How to use this template
+
+An experiment is one self-contained directory: `docs/experiments/<slug>/`.
+
+Layout:
+- `plan.md` — this file. Hypothesis, setup, runs, rubric, decision criteria. Written *before* execution.
+- `results/` — raw outputs, per-run logs, evaluator scores. Small artifacts only; large data goes in `local/experiments/<slug>/` (gitignored) and is referenced from here.
+- `analysis.md` — written *after* execution. Findings, verdict, decisions unlocked.
+
+Update `docs/experiments/index.yaml` when starting and when concluding (status changes).
+
+Audience: future LLMs, not humans. Terse, project-specific, no filler.
+
+Rules for `plan.md`:
+- **Check `docs/experiments/index.yaml` before creating.** If a related experiment exists with the same hypothesis, add a new run to it instead of forking. Re-running is fine; re-stating the same hypothesis under a new slug is not.
+- **Hypothesis is testable.** "Model X handles task Y at quality Z" — not "evaluate model X."
+- **Decision criteria written before runs.** State what verdict each outcome unlocks. Without this, results sit shelved.
+- **Rubric is a rubric, not a feeling.** Specific dimensions, scoring scale, who/what scores (LLM-as-judge, human, automated). If you can't articulate the rubric before running, the experiment isn't ready.
+- **Setup is reproducible by a future LLM** with no prior context. Inputs, prompts, harness, model versions, dependencies. Pointer to dataset or sample files (with hash if the source is mutable).
+- **Variables are explicit.** What's held constant, what's varied. One variable per run unless explicitly factorial.
+- **Status discipline.** `draft` = plan in progress; `ready` = plan finalized, runs pending; `running` = execution in progress; `complete` = analysis.md written; `abandoned` = stopped without verdict (record why).
+- **Improve this template** if you hit friction (missing field, awkward shape, unclear rule). Templates are ideation, not law.
+
+---
+
+```
+---
+status: draft
+created: YYMMDD
+updated: YYMMDD
+---
+
+# Experiment Title
+
+## Hypothesis
+One sentence. Falsifiable.
+
+## Decision Unlocked
+What the verdict allows next. "If pass: commit to X. If fail: switch to Y. If marginal: run follow-up Z." Write before running.
+
+## Setup
+Inputs, prompts, models, harness, dataset/samples, dependencies. Reproducible by a future LLM with no context.
+
+## Variables
+- Held constant: ...
+- Varied: ...
+
+## Rubric
+Dimensions, scoring scale, scorer (LLM-as-judge / human / automated). Pass thresholds.
+
+## Runs
+Index of run identifiers, what each varied. Detailed outputs live in `results/`.
+
+## Open Questions
+Things to resolve before or during execution.
+
+## References
+Files, prior reports, plans this experiment serves. One line each.
+```

@@ -1,0 +1,42 @@
+# How to use this template
+
+Copy to `docs/research/<subdir>/YYMMDD_topic-slug.md`. Pick an existing subdir or create a new one with a short kebab-case name (e.g. `security`, `api-design`). Update the parent `index.yaml`.
+
+Rules:
+- **No generic knowledge.** Save only what's project-specific, version-specific, non-obvious, or learned from this research. If a fact lives in LLM training data and won't go stale, omit it. The report is for future LLMs — they already know the basics.
+- **Body uses content-first summary headings.** "Token Costs of Async Tools" beats "Findings". No "Background / Approach / Conclusion" ceremony.
+- **Findings ARE the headings.** Section names should let an LLM skim and decide whether to read.
+- **Flag uncertainty inline.** "X works for Y (single source, Anthropic blog Mar 2026)" beats "X works for Y." Single-source or conflicting claims get a parenthetical.
+- **Status discipline.** `draft` = thin sources, single-source, or conflicting; `complete` = cross-verified across the source minimums in `web-researcher.md`. Default to `draft` on doubt.
+- **Sources at end, bare list.** Each: URL + one-line on what was extracted. Not a verbose annotated bibliography.
+- **Research is mutable, unlike plans.** When updating, edit the body and add a one-line entry to Update Log. Bump `updated:` in frontmatter.
+- **Improve this template** if you hit friction.
+
+---
+
+```
+---
+status: draft
+date: YYMMDD
+query: original research request, one line
+---
+
+# Report Title
+
+## <Content-first heading 1>
+Findings.
+
+## <Content-first heading 2>
+More findings.
+
+## Caveats
+Version-specific notes, deprecations, freshness concerns, single-source claims that matter.
+
+## Sources
+- URL — what was extracted
+- URL — what was extracted
+
+## Update Log
+(Omit this section until first revision.)
+- YYMMDD: what changed and why
+```

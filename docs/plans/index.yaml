@@ -1,2 +1,2 @@
 docs:
-  260617_audio-reader-mvp.md: Brave extension + local OpenAI-compatible TTS server; phased Kokoro MVP (status: draft)
+  260617_audio-reader-mvp.md: Brave extension + local OpenAI-compatible TTS server; phased Kokoro MVP (status: active; Phase 0 done — Docker CPU Kokoro proven, ~0.8s first-audio, 4–5x RTF; Phase 1 done — speak-selection MVP in extension/, user-verified in Brave; Phase 2 whole-article extraction remaining)

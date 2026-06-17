@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Audio Reader",
+  "version": "0.1.0",
+  "description": "Read selected text aloud via a local OpenAI-compatible TTS server (Kokoro). All inference stays on your machine.",
+  "permissions": ["contextMenus", "storage", "offscreen", "scripting", "activeTab"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Audio Reader" },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "read-selection": {
+      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
+      "description": "Read the current selection aloud"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 created: 260617
 updated: 260617
 ---
@@ -53,4 +53,70 @@ Three phases, each independently demoable. Stop and reassess after Phase 1 befor
 - Keyboard-shortcut conflicts in Brave (reserved combos) — pick a default that's unlikely to collide; allow rebinding.
 
 ## Implementation Log
-(Empty — filled by implementer.)
+Append-only. Filled by implementer.
+
+### Phase 0 — Local server, proven (260617) — COMPLETE ✓
+
+**Outcome:** Kokoro TTS local server stands up and meets the latency target on this Mac. Local quality/latency is no longer unproven. Go for Phase 1.
+
+**Run method chosen: Docker (`ghcr.io/remsky/kokoro-fastapi-cpu:latest`), ONNX-CPU path.**
+- Rationale: Docker on Apple Silicon runs in a Linux VM with **no Metal/MPS passthrough** — so Kokoro-FastAPI's MPS-accelerated path (`start-gpu_mac.sh`) exists *only* in a bare-uv native install. Inside Docker, only the ONNX-CPU path runs. The research flagged ONNX-CPU as the safe path and MPS (#270) as the friction-prone one, so Docker-CPU gives us the safe path with the cleanest persistence/reproducibility.
+- **MPS-vs-CPU verdict: CPU wins; MPS not pursued.** CPU-ONNX already beats the ~1s first-audio target (see numbers), so there was no reason to fight issue #270 / a bare-uv native install. MPS remains a future optimization lever if long-form first-audio (~3s, below) ever needs cutting — but it is not needed for the MVP loop. (Env check confirmed `apple/container` 0.9.0 + `uv` 0.10.7 are available if we ever revisit MPS natively.)
+- Container started with `--restart unless-stopped` for session/crash survival.
+
+**Measured numbers (M4 Pro, 24 GB, macOS 15.7.7, Docker CPU, voice `af_heart`):**
+| Metric | Result | Target | Verdict |
+|---|---|---|---|
+| First-audio latency, short sentence (3 runs) | **0.73–0.86 s** | ~1 s | ✓ meets |
+| First-audio latency, long paragraph (~380 chars) | ~3.06 s | — | acceptable; mitigate in Phase 1 by sending first sentence first |
+| RTF, short sentence (2.89 s audio) | **4.3× real-time** | >1× | ✓ (research predicted ~2× for CPU; M4 Pro ~2.4× better) |
+| RTF, long paragraph (24.85 s audio) | **4.88× real-time** | >1× | ✓ |
+| Streaming | **Confirmed progressive** — long-paragraph chunks (98) arrived over 2.18 s, not single-burst | works | ✓ |
+| Audio integrity | 24 kHz mono PCM s16le, mean −26 dB / max −9.6 dB (clean speech, not silent/clipping) | playable | ✓ |
+
+Quality-vs-hosted-demo: **user signed off (260617)** — `af_heart` samples judged good quality, not materially worse than hosted demos. Engine decision (Kokoro) holds.
+
+**Canonical defaults (become Phase 1 extension defaults):**
+- Endpoint: `http://localhost:8880/v1/audio/speech`
+- Voice: `af_heart` (Kokoro's top-rated American-female default; 67 voice packs loaded)
+- Model id: `kokoro` (OpenAI aliases `tts-1` / `tts-1-hd` / `gpt-4o-mini-tts` also accepted)
+- Native sample rate: 24 kHz mono
+
+**Persistence model (decided with user, 260617): on-demand, no autostart.** Docker Desktop `AutoStart` stays `false` (user does not want it launching at login). The container's `--restart unless-stopped` policy gives exactly the desired behavior: quitting Docker Desktop stops the container; relaunching Docker Desktop restarts the daemon, which auto-resumes the `unless-stopped` container — so the model is already running when the user next opens Docker Desktop. The only case it stays down is an explicit `docker stop kokoro-tts` (then `docker start kokoro-tts`). No reboot-survival login item is wanted; the user starts Docker Desktop when they need narration and quits it otherwise.
+
+**Resolves Open Questions:** server run method = Docker/ONNX-CPU (recorded above); ONNX-CPU is comfortably fast enough — no push toward a different server build.
+
+**`local/` artifacts (gitignored):** `local/kokoro/`
+- `scripts/benchmark.sh` — curl+ffprobe latency/RTF benchmark (reproducible; honors `ENDPOINT`/`VOICE`/`MODEL` env).
+- `scripts/stream_probe.py` — stdlib streaming probe (true first-audio + progressive-streaming proof).
+- `logs/` — timestamped benchmark + probe run logs.
+- `samples/short_af_heart.wav`, `samples/long_af_heart.wav` — generated audio (sent to user for quality sign-off).
+- `README.md` — operational runbook (start/stop/health, defaults, reboot persistence).
+
+### Phase 1 — Speak-selection MVP (260617) — COMPLETE ✓ (user-verified in Brave)
+
+**Outcome:** Brave/Chromium MV3 extension in `extension/`. Select text → `Cmd+Shift+S` (or right-click → "Read selection aloud") → streamed narration with an in-page control bar. User loaded it unpacked and verified the core loop works (play/pause, seek, speed, voice, reload-cleanup) and the audio quality. The post-test fixes below were applied and re-verified.
+
+**Design decisions locked with user (resolves Open Questions):**
+- **Player placement = in-page floating control bar, bottom-center.** Not the toolbar popup. Rationale (user): eyes/scroll are in the top half while reading, the mouse rests near the bottom, and the popup closes on page interaction. Bar lives in a **closed Shadow DOM** so host-page CSS can't break it. Exact position/styling to iterate.
+- **Selected text is NOT echoed** in the player — transport controls only (play/pause, seek scrubber, time, speed 0.75–2×, close).
+- **Trigger = `Cmd+Shift+S` + context-menu "Read selection aloud"** (recommended option). Shortcut rebindable at `brave://extensions/shortcuts`.
+
+**Architecture (and the load-bearing reason for it):**
+- Audio plays from a **hidden offscreen document** (`offscreen.js`), not the page. Decisive reason: many sites set `connect-src`/`media-src` CSP that would block both the localhost fetch and in-page `<audio>`. The offscreen doc runs in the extension's own CSP context, so it works on any site. The in-page bar is just a remote control.
+- **Streaming via MediaSource:** the offscreen doc issues ONE `POST /v1/audio/speech` with `stream:true, response_format:mp3` and pipes the `ReadableStream` chunks into a `SourceBuffer('audio/mpeg')`. This leans on the server-side sentence-boundary chunked streaming we *proved* in Phase 0 (98 progressive chunks) — so playback starts ~1s in and the whole selection is one seekable timeline. No client-side chunking needed for Phase 1; the plan's "start before fully synthesized" requirement is met by server streaming + MSE.
+- **Speed = client-side `playbackRate`** (pitch preserved), so changing speed is instant with no re-synthesis. The server `speed` param is left at 1.0.
+- Message flow: content-bar → service worker → offscreen (controls); offscreen → service worker → content-bar (state). Trigger grabs selection via `chrome.scripting.executeScript` (command path) or `info.selectionText` (context-menu path). Session auto-stops on tab close / navigation.
+- Config in `chrome.storage.sync`: `serverUrl` (default `http://localhost:8880`), `voice` (`af_heart`, list loaded live from `/v1/audio/voices`), `speed`. Pointing `serverUrl` elsewhere = the carried Chatterbox/quality-mode hook, no code change.
+
+**Files:** `extension/` — `manifest.json` (MV3), `background.js` (SW), `offscreen.{html,js}` (player), `content.js` (Shadow-DOM bar), `options.{html,js}` (settings), `popup.{html,js}` (status/help), `README.md` (load + manual-test steps). Tracked in git (real project code, not under `local/`).
+
+**Known MVP limitations:** top-frame selections only (iframe selections not captured); no custom toolbar icon (cosmetic); MP3-segment MSE may have minor chunk-boundary artifacts (tune later — plan's open question on chunk-boundary prosody); whole-article extraction is Phase 2.
+
+**Post-test fixes (260617, after first user run in Brave):**
+- **Speed dropdown + voice dropdown in the bar.** Replaced the cycle-button speed control with a native `<select>` (opens upward at viewport bottom) and added a voice `<select>`. Voice list is fetched by the service worker (extension context, CSP-safe) and passed to the bar in `SHOW_PLAYER`; selecting a voice persists to storage and applies to the next reading.
+- **Fixed speed-not-applied-on-new-audio bug.** Root cause: live speed changes were applied to the offscreen player + bar label but never persisted, so a new reading reloaded the saved default (1×) while the bar still showed the last pick — display and playback disagreed. Fix: persist speed on every change (`storage.sync`); new readings start at the persisted speed; the bar initializes its speed control from that same value and re-syncs from playback state (`state.rate`). Also made the offscreen player re-assert the desired rate on `loadedmetadata`/`play` so a fresh MediaSource source can't silently reset it to 1×.
+- Both speed and voice now persist across readings, as requested.
+- **Fixed: audio kept playing after page reload** (bar gone, sound continued). Root cause: the stop-on-navigation listener keyed off `changeInfo.url`, which (a) doesn't change on a reload and (b) is only delivered with the `"tabs"` permission, which the extension doesn't hold — so it never fired. Switched to `changeInfo.status === "loading"`, which fires on both reload and navigation and needs no extra permission. Tab-close cleanup (`tabs.onRemoved`) was already correct.
+
+**Validation still owed (user, in Brave):** load unpacked → select paragraph → `Cmd+Shift+S` → hear narration; pause/resume, scrub, speed, close all work; long multi-paragraph selection starts before full synthesis; changing voice/endpoint in Settings takes effect without reinstall.

@@ -1,0 +1,3 @@
+purpose: capability tests and benchmarks, one self-contained subdir per experiment
+subdirs:
+  webgpu-browser-engine: Kokoro WebGPU in MV3 offscreen — PASS, 9.52x RT (~2x Docker); WASM floor 0.71x

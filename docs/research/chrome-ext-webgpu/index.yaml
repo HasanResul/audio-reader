@@ -1,0 +1,3 @@
+purpose: Chrome MV3 extension WebGPU integration — offscreen docs, kokoro-js, CSP
+docs:
+  260618_kokoro-webgpu-mv3-extension.md: WebGPU in offscreen docs, kokoro-js API, CSP, SAB gotchas

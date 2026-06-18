@@ -1,0 +1,17 @@
+{
+  "name": "audio-reader-extension",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for the in-browser Kokoro engine. The Docker engine needs no build; only the browser engine bundles kokoro-js + onnxruntime-web + an MP3 encoder.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "kokoro-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

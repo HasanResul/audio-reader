@@ -3,7 +3,7 @@
 // offscreen audio session -> relay control/state messages between the in-page
 // control bar (content script) and the offscreen player.
 
-const DEFAULTS = { serverUrl: "http://localhost:8880", voice: "af_heart", speed: 1.0 };
+const DEFAULTS = { serverUrl: "http://localhost:8880", voice: "af_heart", speed: 1.0, engine: "auto" };
 
 // The single active reading session, or null. { tabId }
 let session = null;
@@ -47,6 +47,35 @@ async function ensureOffscreen() {
 
 function toOffscreen(msg) {
   chrome.runtime.sendMessage({ target: "offscreen", ...msg }).catch(() => {});
+}
+
+// --- Toolbar badge: which engine is actually generating audio --------------
+
+const BADGE = {
+  gpu:    { text: "GPU", color: "#1a8917" },
+  cpu:    { text: "CPU", color: "#c77700" },
+  server: { text: "SRV", color: "#0a84ff" }
+};
+
+function setEngineBadge(engine) {
+  const b = BADGE[engine];
+  if (!b) return;
+  chrome.action.setBadgeText({ text: b.text });
+  chrome.action.setBadgeBackgroundColor({ color: b.color });
+}
+
+function clearEngineBadge() {
+  chrome.action.setBadgeText({ text: "" });
+}
+
+// Warm a browser engine ahead of the first request so the user doesn't eat the
+// model load + ~2.7s cold-shader penalty. Only for an *explicit* browser pick —
+// "auto" stays lazy so we never trigger a ~300MB download the user didn't choose.
+async function warmEngineIfBrowser(engine) {
+  if (engine !== "webgpu" && engine !== "wasm") return;
+  const cfg = await getConfig();
+  await ensureOffscreen();
+  toOffscreen({ type: "OFFSCREEN_WARMUP", engine, serverUrl: cfg.serverUrl });
 }
 
 // --- Tab messaging helpers ------------------------------------------------
@@ -104,6 +133,7 @@ async function startReading(tabId, rawText) {
   toOffscreen({
     type: "OFFSCREEN_START",
     text,
+    engine: cfg.engine,
     serverUrl: cfg.serverUrl,
     voice: cfg.voice,
     speed: cfg.speed
@@ -114,6 +144,7 @@ function stopSession({ hideBar = true } = {}) {
   toOffscreen({ type: "OFFSCREEN_CONTROL", action: "stop" });
   if (session && hideBar) toTab(session.tabId, { type: "HIDE_PLAYER" });
   session = null;
+  clearEngineBadge();
 }
 
 // Extract the page's main article and read it; fall back to a manual-selection
@@ -173,7 +204,11 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   // State updates coming back from the offscreen player.
   if (msg.type === "OFFSCREEN_STATE") {
-    if (session) toTab(session.tabId, { type: "STATE", state: msg.state });
+    if (session) {
+      toTab(session.tabId, { type: "STATE", state: msg.state });
+      if (msg.state.ended) clearEngineBadge();
+      else if (msg.state.engine) setEngineBadge(msg.state.engine);
+    }
     return;
   }
 
@@ -200,6 +235,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "SET_VOICE") {
     chrome.storage.sync.set({ voice: msg.voice });
   }
+});
+
+// --- Idle warmup: prime an explicitly-selected browser engine -------------
+
+chrome.runtime.onStartup.addListener(async () => {
+  const cfg = await getConfig();
+  warmEngineIfBrowser(cfg.engine);
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.engine) warmEngineIfBrowser(changes.engine.newValue);
 });
 
 // --- Cleanup: stop when the originating tab navigates or closes -----------

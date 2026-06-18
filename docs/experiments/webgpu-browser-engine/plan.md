@@ -19,7 +19,8 @@ and reaches paragraph-scale real-time factor ≥ the Docker CPU/ONNX baseline (4
 
 ## Setup
 - Hardware: M4 Pro / 24 GB / macOS 15.7.7. Chrome (stable), WebGPU → Metal.
-- Harness: throwaway unpacked extension at repo-root `webgpu-spike/` (see its `RUNME.md`).
+- Harness: throwaway unpacked extension formerly at repo-root `webgpu-spike/` (**retired 260618** once the
+  real engine shipped into `extension/` — its proven patterns now live in `extension/src/browser-engine-entry.js`).
   - MV3: background SW → offscreen document hosts inference (SW can't use WebGPU / dynamic import).
   - kokoro-js 1.2.1 + @huggingface/transformers v3 + onnxruntime-web, **bundled locally** with esbuild
     (`platform=browser`); MV3 forbids remote script.

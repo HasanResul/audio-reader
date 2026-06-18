@@ -23,13 +23,51 @@
       }
       button.secondary { background: #e5e5ea; color: #1c1c1e; margin-left: 10px; }
       .hint { font-size: 12px; color: #8a8a8e; margin-top: 4px; }
+      #engines { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+      .engine-opt {
+        display: flex; align-items: baseline; gap: 8px; font-weight: 400; margin: 0;
+        padding: 8px 10px; border: 1px solid #e2e2e7; border-radius: 8px; cursor: pointer;
+      }
+      .engine-opt:hover { background: #f7f7fa; }
+      .engine-opt input { margin: 0; }
+      .engine-opt.disabled { opacity: 0.5; cursor: not-allowed; }
+      .engine-opt.disabled:hover { background: none; }
+      .engine-opt b { font-weight: 600; }
+      .engine-detail { font-size: 12px; color: #8a8a8e; }
+      .engine-detail.warn { color: #b25000; }
+      .tag { font-size: 11px; font-weight: 600; color: #1a8917; border: 1px solid #b6e0b3; border-radius: 6px; padding: 0 5px; }
       #status { margin-left: 12px; font-size: 13px; }
       .ok { color: #1a8917; } .err { color: #d70015; }
     </style>
   </head>
   <body>
     <h1>Audio Reader</h1>
-    <p class="sub">Reads selected text aloud through a local OpenAI-compatible TTS server. Nothing leaves your machine.</p>
+    <p class="sub">Reads selected text aloud with Kokoro — in your browser (WebGPU/WASM) or via a local TTS server. Nothing leaves your machine.</p>
+
+    <label>Engine</label>
+    <div id="engines">
+      <label class="engine-opt" id="opt-auto">
+        <input type="radio" name="engine" value="auto" />
+        <span><b>Automatic</b> <span class="tag">recommended</span></span>
+        <span class="engine-detail">Uses the fastest engine available.</span>
+      </label>
+      <label class="engine-opt" id="opt-webgpu">
+        <input type="radio" name="engine" value="webgpu" />
+        <span>🟢 <b>Browser · WebGPU</b></span>
+        <span class="engine-detail" id="d-webgpu">Checking…</span>
+      </label>
+      <label class="engine-opt" id="opt-server">
+        <input type="radio" name="engine" value="server" />
+        <span>🔵 <b>Docker server</b></span>
+        <span class="engine-detail" id="d-server">Checking…</span>
+      </label>
+      <label class="engine-opt" id="opt-wasm">
+        <input type="radio" name="engine" value="wasm" />
+        <span>🟡 <b>Browser · WASM</b></span>
+        <span class="engine-detail warn" id="d-wasm">Always works, but slow — may stall on long text.</span>
+      </label>
+    </div>
+    <div class="hint">In-browser engines run Kokoro locally with no server. The first browser run downloads the model (~300&nbsp;MB for WebGPU, ~86&nbsp;MB for WASM), cached by the browser afterwards.</div>
 
     <label for="serverUrl">TTS server URL</label>
     <input type="text" id="serverUrl" placeholder="http://localhost:8880" />

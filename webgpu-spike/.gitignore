@@ -1,8 +1,0 @@
-# Throwaway spike. Commit only the lightweight source; everything below is
-# regenerable from a clean checkout via the steps in RUNME.md (npm install →
-# vendor-copy the ORT wasm → esbuild bundle). Keeps ~45MB of binaries out of git.
-node_modules/
-vendor/
-offscreen-bundle.js
-/ort-wasm-simd-threaded.jsep.wasm
-/ort-wasm-simd-threaded.jsep.mjs

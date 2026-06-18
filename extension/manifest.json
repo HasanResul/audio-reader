@@ -1,10 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Audio Reader",
-  "version": "0.1.0",
-  "description": "Read selected text aloud via a local OpenAI-compatible TTS server (Kokoro). All inference stays on your machine.",
+  "version": "0.2.0",
+  "description": "Read selected text or whole articles aloud with Kokoro — in your browser (WebGPU/WASM) or via a local TTS server. All inference stays on your machine.",
   "permissions": ["contextMenus", "storage", "offscreen", "scripting", "activeTab"],
-  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*",
+    "https://*.hf.co/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* https://huggingface.co https://*.huggingface.co https://*.hf.co"
+  },
+  "web_accessible_resources": [
+    { "resources": ["vendor/ort/*", "engines/browser-engine.bundle.js"], "matches": ["<all_urls>"] }
+  ],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "Audio Reader" },
   "options_page": "options.html",

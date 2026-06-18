@@ -10,6 +10,13 @@
 
   const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
+  // Live-engine marker, keyed by the `engine` field the offscreen player reports.
+  const ENGINE = {
+    gpu:    { glyph: "🟢", title: "In-browser · WebGPU" },
+    cpu:    { glyph: "🟡", title: "In-browser · WASM (slow — may stall on long text)" },
+    server: { glyph: "🔵", title: "Docker server" }
+  };
+
   let host = null;
   let root = null;
   let els = null;
@@ -84,6 +91,8 @@
         select option { color: #1c1c1e; background: #fff; font-weight: 400; }
         .speed { font-variant-numeric: tabular-nums; }
         .voice { max-width: 130px; font-weight: 400; }
+        .engine { font-size: 11px; line-height: 1; cursor: default; opacity: 0.95; }
+        .engine:empty { display: none; }
         .status { opacity: 0.7; white-space: nowrap; max-width: 26vw; overflow: hidden; text-overflow: ellipsis; }
         .status.error { color: #ff6b6b; opacity: 1; }
         .status:empty { display: none; }
@@ -96,6 +105,7 @@
         <input class="seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek" />
         <select class="speed" title="Playback speed" aria-label="Playback speed"></select>
         <select class="voice" title="Voice (applies to the next reading)" aria-label="Voice"></select>
+        <span class="engine" title="" aria-label="Active engine"></span>
         <span class="status"></span>
         <button class="icon close" data-act="stop" title="Stop &amp; close" aria-label="Close">✕</button>
       </div>
@@ -108,6 +118,7 @@
       seek: root.querySelector(".seek"),
       speed: root.querySelector(".speed"),
       voice: root.querySelector(".voice"),
+      engine: root.querySelector(".engine"),
       status: root.querySelector(".status")
     };
 
@@ -169,6 +180,7 @@
     if (data) {
       populateVoices(data.voices, data.voice);
       setSpeed(data.speed);
+      if (els.engine) { els.engine.textContent = ""; els.engine.title = ""; }
       setStatus("Connecting…");
     }
   }
@@ -187,10 +199,16 @@
     if (!els) return;
 
     if (state.error) setStatus(state.error, true);
+    else if (state.status) setStatus(state.status);  // engine status (model download, synthesizing…)
     else if (state.buffering && !state.playing) setStatus("Buffering…");
     else setStatus("");
 
     els.play.textContent = state.playing ? "⏸" : "▶";
+
+    if (state.engine && ENGINE[state.engine]) {
+      els.engine.textContent = ENGINE[state.engine].glyph;
+      els.engine.title = ENGINE[state.engine].title;
+    }
 
     if (isFinite(state.duration) && state.duration > 0) {
       els.seek.max = String(state.duration);

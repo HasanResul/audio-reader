@@ -1,0 +1,6 @@
+# Regenerable from a clean checkout via `npm install && npm run build`
+# (vendor-copy the ORT wasm → esbuild the browser-engine bundle). Keeps ~25MB of
+# binaries out of git. The Docker engine and all shared files are plain source.
+node_modules/
+vendor/
+engines/browser-engine.bundle.js

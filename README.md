@@ -14,7 +14,7 @@ floating control bar gives you play/pause, a seek scrubber, speed, and voice. Au
 **Everything is local. Nothing leaves your machine** — inference runs in your browser
 (WebGPU/WASM) or against a local Docker server you control.
 
-<!-- TODO: add a screenshot / GIF of the floating control bar here -->
+![The floating control bar reading a selection — play/pause, seek, time, speed, voice, and a green WebGPU engine marker](assets/control-bar.png)
 
 ## Highlights
 

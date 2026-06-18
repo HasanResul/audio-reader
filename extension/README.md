@@ -7,7 +7,7 @@ produce audio, picked in settings:
   locally via onnxruntime-web. Downloads the model once (~300 MB WebGPU / ~86 MB
   WASM), then cached by the browser.
 - **Local Docker server** — POSTs to a local OpenAI-compatible Kokoro server
-  (see `local/kokoro/README.md`).
+  (see `../server/README.md`).
 
 Everything is local; nothing leaves your machine. Chrome/Edge/Brave only (the
 in-browser engine needs WebGPU/WASM as shipped by Chromium). Distribution is
@@ -51,7 +51,7 @@ The picker reflects **live availability** when you open settings:
 
 - **Automatic** (default) — uses the fastest available: WebGPU → Docker server → WASM.
 - **Browser · WebGPU** 🟢 — selectable only if a GPU adapter is granted; otherwise disabled.
-- **Docker server** 🔵 — selectable only if the server's `/health` responds; otherwise disabled with a ⚠️ "start the container" note. Needs the server running (see `local/kokoro/README.md`):
+- **Docker server** 🔵 — selectable only if the server's `/health` responds; otherwise disabled with a ⚠️ "start the container" note. Needs the server running (see `../server/README.md`):
   ```bash
   docker start kokoro-tts
   curl -s http://localhost:8880/health

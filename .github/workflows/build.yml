@@ -1,0 +1,30 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build browser-engine bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - name: Install
+        working-directory: extension
+        run: npm ci
+      - name: Build
+        working-directory: extension
+        run: npm run build
+      - name: Verify build output exists
+        working-directory: extension
+        run: test -f engines/browser-engine.bundle.js && test -d vendor/ort

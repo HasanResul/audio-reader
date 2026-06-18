@@ -1,0 +1,68 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! Please fill in the details below.
+        For security issues, do **not** use this form — see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I read a whole article on X, playback...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to '...'
+        2. Select '...' / press the shortcut
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine in use
+      options:
+        - Automatic
+        - Browser · WebGPU
+        - Browser · WASM
+        - Docker server
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + version
+      placeholder: "Brave 1.6x / Chrome 13x / Edge 13x"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "macOS 15.7 / Windows 11 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console / service-worker logs
+      description: Relevant errors from DevTools or the extension's service worker (if any).
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran `npm run build` (if the bug involves a browser engine).
+          required: false
+        - label: I searched existing issues for a duplicate.
+          required: true

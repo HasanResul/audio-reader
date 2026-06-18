@@ -49,4 +49,4 @@ Raw numbers in `results/260618_run.md`.
 ## References
 - `docs/research/chrome-ext-webgpu/260618_kokoro-webgpu-mv3-extension.md` — feasibility research.
 - `webgpu-spike/` — harness (throwaway).
-- `local/kokoro/` — Docker baseline runbook + benchmark logs.
+- `server/` — Docker baseline runbook + benchmark scripts (raw benchmark logs in `local/kokoro/logs/`, gitignored).

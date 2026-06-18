@@ -1,2 +1,9 @@
+# Machine-local workspace (heavy artifacts, scratch, personal reference)
 local
+
+# OS cruft
 .DS_Store
+
+# Claude Code local/per-machine config (keep .claude/agents tracked)
+.claude/settings.json
+.claude/settings.local.json

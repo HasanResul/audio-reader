@@ -59,7 +59,7 @@ extension-store publishing.
 - `docs/research/chrome-ext-webgpu/260618_kokoro-webgpu-mv3-extension.md` — MV3/offscreen/CSP/ORT details.
 - `webgpu-spike/` — working reference implementation of the offscreen WebGPU engine (throwaway harness).
 - `extension/` — current single-engine (Docker) extension; the shared surface to refactor behind a boundary.
-- `local/kokoro/` — Docker engine runbook + baseline benchmarks.
+- `server/` — Docker engine runbook + benchmark scripts (baseline benchmark logs in `local/kokoro/logs/`, gitignored).
 - `docs/plans/260617_audio-reader-mvp.md` — the MVP this extends.
 
 ## Validation

@@ -40,8 +40,15 @@ async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
-    reasons: ["AUDIO_PLAYBACK"],
-    justification: "Stream and play text-to-speech audio from the local TTS server."
+    // AUDIO_PLAYBACK alone closes the document after 30s without audio playing —
+    // so a pause longer than that destroys the player AND the cached browser
+    // engine + loaded model, breaking resume and forcing a model reload on the
+    // next read. BLOBS (we URL.createObjectURL the MediaSource on every play) and
+    // WORKERS (onnxruntime-web spawns workers for the browser engine) are both
+    // genuinely true and carry an unbounded lifetime, keeping the document alive
+    // across long pauses. The document is still torn down explicitly on stop().
+    reasons: ["AUDIO_PLAYBACK", "BLOBS", "WORKERS"],
+    justification: "Stream and play text-to-speech audio, create blob URLs for the MediaSource player, and run the in-browser Kokoro engine (onnxruntime workers)."
   });
 }
 
@@ -213,6 +220,13 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 
   if (!sender.tab) return;
+
+  // The service worker may have been terminated during a long pause, dropping the
+  // in-memory session. Every CONTROL/SET_VOICE message originates from the active
+  // bar's tab, so recover the session→tab mapping from the sender. Without this,
+  // OFFSCREEN_STATE updates (which carry no sender.tab) would stop reaching the
+  // bar after the worker restarts and it would look frozen even while audio plays.
+  if (!session) session = { tabId: sender.tab.id };
 
   // Control commands coming from the in-page bar (content script).
   if (msg.type === "CONTROL") {

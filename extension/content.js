@@ -43,6 +43,7 @@
     root.innerHTML = `
       <style>
         :host { all: initial; }
+        [hidden] { display: none !important; }
         .bar {
           pointer-events: auto;
           margin: 0 auto;
@@ -107,6 +108,7 @@
         <select class="voice" title="Voice (applies to the next reading)" aria-label="Voice"></select>
         <span class="engine" title="" aria-label="Active engine"></span>
         <span class="status"></span>
+        <button class="icon download" data-act="download" title="Download MP3" aria-label="Download audio" hidden>⬇</button>
         <button class="icon close" data-act="stop" title="Stop &amp; close" aria-label="Close">✕</button>
       </div>
     `;
@@ -119,7 +121,8 @@
       speed: root.querySelector(".speed"),
       voice: root.querySelector(".voice"),
       engine: root.querySelector(".engine"),
-      status: root.querySelector(".status")
+      status: root.querySelector(".status"),
+      download: root.querySelector(".download")
     };
 
     for (const v of SPEEDS) {
@@ -131,6 +134,8 @@
 
     root.querySelector(".play").addEventListener("click", () => send({ type: "CONTROL", action: "toggle" }));
     root.querySelector(".close").addEventListener("click", () => send({ type: "CONTROL", action: "stop" }));
+    // Page title is the filename (sanitized offscreen); sent only on click.
+    els.download.addEventListener("click", () => send({ type: "CONTROL", action: "download", value: document.title }));
 
     els.speed.addEventListener("change", () => {
       send({ type: "CONTROL", action: "speed", value: Number(els.speed.value) });
@@ -181,6 +186,7 @@
       populateVoices(data.voices, data.voice);
       setSpeed(data.speed);
       if (els.engine) { els.engine.textContent = ""; els.engine.title = ""; }
+      els.download.hidden = true;  // reset until the new reading is fully assembled
       setStatus("Connecting…");
     }
   }
@@ -214,6 +220,8 @@
       els.seek.max = String(state.duration);
       els.dur.textContent = fmt(state.duration);
     }
+    // Show the download button once the complete MP3 has been assembled.
+    els.download.hidden = !state.canDownload;
     if (!scrubbing) {
       els.seek.value = String(state.currentTime || 0);
       els.cur.textContent = fmt(state.currentTime || 0);

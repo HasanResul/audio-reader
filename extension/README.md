@@ -78,5 +78,6 @@ Everything except "produce audio from text" is shared across engines.
 - Selections inside iframes aren't captured (top frame only).
 - First browser-engine run downloads the model; progress shows in the bar (per-file, so the % cycles per file).
 - Seek range grows as audio buffers; full duration is known once synthesis finishes.
+- On long reads only a window around the playhead is buffered (~5 min back + ~90s ahead, to stay under the MediaSource memory quota); the full audio is kept in memory and assembled into a complete file once synthesis finishes, so seeking anywhere works from then on. While still synthesizing, seeking outside the current window briefly buffers. (Generation is paced to playback — pausing pauses synthesis — so the complete file is ready once you've reached the end.)
 - WASM is below real-time — fine for short selections, slow (buffering) for long articles.
 - Article extraction quality depends on the page; heavy SPAs / paywalled / oddly-structured layouts fall back to the manual-selection hint.

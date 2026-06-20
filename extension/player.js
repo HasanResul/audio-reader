@@ -2,10 +2,17 @@
 //
 // Owns the HTMLAudioElement, state reporting, and transport controls. Engines
 // hand it a ReadableStream of MP3 chunks via playMpegStream(); a MediaSource
-// pumps them so playback starts before synthesis finishes. Both engines feed
+// streams them so playback starts before synthesis finishes. Both engines feed
 // this one path — the server streams MP3 off the network, the browser engine
 // MP3-encodes its generated PCM on the fly — so the seekable timeline, controls,
 // and state shape are identical regardless of which engine produced the audio.
+//
+// Memory model: a long article is far more audio than the MediaSource buffer's
+// quota (a few MB) can hold, so we keep every generated chunk in a heap array
+// (cheap — ~1 MB/min of MP3) and feed the MediaSource only a bounded WINDOW
+// around the playhead. Once synthesis finishes, the heap chunks are assembled
+// into one complete file; seeking back into audio that's left the window swaps
+// the element onto that file, so re-listening never needs re-synthesis.
 
 export function createPlayer() {
   const audio = new Audio();
@@ -19,10 +26,15 @@ export function createPlayer() {
 
   let mediaSource = null;
   let sourceBuffer = null;
-  let queue = [];          // pending Uint8Array chunks awaiting append
-  let streamDone = false;  // network stream fully read
-  let objectUrl = null;
+  let allChunks = [];      // every generated MP3 chunk, kept in heap for the
+                           // full-file assembly + seek-back (cheap: ~1 MB/min)
+  let appendCursor = 0;    // index of the next chunk to feed the MediaSource window
+  let streamDone = false;  // source stream fully read into allChunks
+  let fullBlobUrl = null;  // complete-file object URL, set once synthesis finishes
+  let objectUrl = null;    // current audio.src object URL (MediaSource, then full file)
   let started = false;     // playback kicked off for the current session
+  let canDownload = false; // the complete MP3 is assembled and downloadable
+  let knownDuration = 0;   // true total duration, measured once synthesis finishes
 
   // Bumped on every new source (playMpegStream / playBlob / stop). A streaming
   // read loop captures its value and bails the moment a newer session starts, so
@@ -43,8 +55,25 @@ export function createPlayer() {
     return 0;
   }
 
+  // Diagnostic: a contiguous stream should always be a single buffered range.
+  // More than one range means the timeline has a gap (the cause of the
+  // crackle-then-skip artifact) — warn so it's visible in the offscreen console.
+  // With sourceBuffer.mode = "sequence" this should never fire.
+  function warnOnBufferGap() {
+    if (!sourceBuffer || sourceBuffer.buffered.length <= 1) return;
+    const b = sourceBuffer.buffered;
+    const gaps = [];
+    for (let i = 1; i < b.length; i++) {
+      gaps.push(`${b.end(i - 1).toFixed(3)}s→${b.start(i).toFixed(3)}s`);
+    }
+    console.warn("[audio-reader] buffered timeline gap(s):", gaps.join(", "));
+  }
+
   function postState(extra = {}) {
-    const duration = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : bufferedEnd();
+    // Prefer the true total once synthesis has finished; otherwise the live
+    // streaming buffer end (the scrubber max grows as audio buffers).
+    const duration = knownDuration ||
+      (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : bufferedEnd());
     chrome.runtime.sendMessage({
       type: "OFFSCREEN_STATE",
       state: {
@@ -55,6 +84,7 @@ export function createPlayer() {
         duration,
         rate: audio.playbackRate,
         buffering: audio.readyState < 3 && !audio.ended,
+        canDownload,
         ...stateExtra,
         ...extra
       }
@@ -67,15 +97,80 @@ export function createPlayer() {
   });
   audio.addEventListener("error", () => postState({ error: "Audio playback failed." }));
 
+  // Advance the buffer window as the playhead moves: append more ahead, evict
+  // behind. (Replaces read-side backpressure — reading now fills the heap fast.)
+  audio.addEventListener("timeupdate", () => feedWindow());
+
+  // If the user seeks to audio that's left the window but was already generated,
+  // switch to the complete file (assembled at synthesis end) and seek there —
+  // full, native, seamless seeking from then on.
+  audio.addEventListener("seeking", () => {
+    if (!sourceBuffer) return;        // already on the full file — native seek
+    if (playheadInWindow()) return;   // normal in-window MediaSource seek
+    if (fullBlobUrl) { swapToFullFile(audio.currentTime || 0); return; }
+    feedWindow();  // still generating: let the window refill toward the target
+  });
+
   // --- MediaSource plumbing (streaming MP3 path) --------------------------
 
-  function pump() {
+  // The MediaSource buffer holds only a window around the playhead: at most
+  // MAX_AHEAD seconds ahead (so a fast engine can't race the whole article in and
+  // blow the quota) and ~KEEP_BEHIND seconds behind (the live seek-back range;
+  // older played audio is evicted to reclaim memory). The full audio lives in
+  // `allChunks`, so nothing is lost — once synthesis finishes, seeking past the
+  // window swaps onto the assembled complete file. The window (~MAX_AHEAD +
+  // KEEP_BEHIND ≈ 6.5 min ≈ 6–7 MB) stays well under the SourceBuffer quota.
+  const MAX_AHEAD = 90;       // seconds of audio to keep buffered ahead of the playhead
+  const KEEP_BEHIND = 300;    // seconds of played audio to retain (≈ seek-back range)
+  const KEEP_BEHIND_MIN = 30; // floor retained under quota pressure (forced eviction)
+  const EVICT_BATCH = 30;     // only evict once this much has piled up, to avoid churn
+
+  function bufferAhead() {
+    return bufferedEnd() - (audio.currentTime || 0);
+  }
+
+  // Is the playhead inside the currently-buffered window? (False once the user
+  // has seeked to audio the window doesn't hold.)
+  function playheadInWindow() {
+    if (!sourceBuffer || !sourceBuffer.buffered.length) return false;
+    const t = audio.currentTime || 0;
+    const b = sourceBuffer.buffered;
+    return t >= b.start(0) && t <= b.end(b.length - 1);
+  }
+
+  // Drop already-played audio behind the playhead to free SourceBuffer memory.
+  // Returns true if a removal was started (it fires updateend → feedWindow()).
+  // Batches removals (EVICT_BATCH) so it doesn't churn a tiny remove() per frame;
+  // `force` removes whatever it can, for the quota safety-net path.
+  function evictBehind(force) {
+    if (!sourceBuffer || sourceBuffer.updating || !sourceBuffer.buffered.length) return false;
+    const start = sourceBuffer.buffered.start(0);
+    // Normally retain KEEP_BEHIND for seek-back; when forced (quota hit on a
+    // machine with a smaller buffer) free aggressively down to KEEP_BEHIND_MIN.
+    const cutoff = (audio.currentTime || 0) - (force ? KEEP_BEHIND_MIN : KEEP_BEHIND);
+    if (cutoff <= start) return false;                        // nothing safe to remove yet
+    if (!force && cutoff - start < EVICT_BATCH) return false; // wait for a full batch
+    try { sourceBuffer.remove(start, cutoff); return true; }
+    catch (e) { return false; }
+  }
+
+  // Keep the MediaSource window fed from the heap: evict what's fallen behind,
+  // append the next chunk while we're within MAX_AHEAD of the playhead, and close
+  // the stream once everything generated has been appended. Driven by updateend
+  // (append→append chains) and timeupdate (playback drains → append more).
+  function feedWindow() {
     if (!sourceBuffer || sourceBuffer.updating) return;
 
-    if (queue.length) {
+    if (evictBehind(false)) return;  // removal in flight; updateend re-runs feedWindow
+
+    if (appendCursor < allChunks.length && bufferAhead() < MAX_AHEAD) {
       try {
-        sourceBuffer.appendBuffer(queue.shift());
+        sourceBuffer.appendBuffer(allChunks[appendCursor]);
+        appendCursor++;
       } catch (e) {
+        // Proactive eviction should keep us under quota; this is the safety net.
+        // Free space and retry on updateend; only surface if nothing's left.
+        if (e.name === "QuotaExceededError" && evictBehind(true)) return;
         postState({ error: "Buffer append failed: " + e.message });
         return;
       }
@@ -86,35 +181,104 @@ export function createPlayer() {
       return;
     }
 
-    if (streamDone && mediaSource && mediaSource.readyState === "open") {
+    if (streamDone && appendCursor >= allChunks.length &&
+        mediaSource && mediaSource.readyState === "open") {
       try { mediaSource.endOfStream(); } catch (e) { /* already ended */ }
     }
   }
 
-  function readLoop(reader, session) {
-    if (session !== playSession) {
-      try { reader.cancel(); } catch (e) {}
-      return;
+  // Assemble every generated chunk into one complete MP3 file, kept ready for a
+  // seek-back to swap onto (see swapToFullFile) and for download. Cheap relative
+  // to the model. Also probes the file's true duration so the scrubber can show
+  // the real total instead of the streaming estimate.
+  function buildFullBlob(session) {
+    if (session !== playSession || fullBlobUrl || !allChunks.length) return;
+    try {
+      fullBlobUrl = URL.createObjectURL(new Blob(allChunks, { type: "audio/mpeg" }));
+    } catch (e) {
+      return;  // couldn't assemble; windowed playback still works
     }
-    reader.read().then(({ done, value }) => {
-      if (session !== playSession) {
-        try { reader.cancel(); } catch (e) {}
-        return;
+    canDownload = true;
+    const probe = new Audio();
+    probe.preload = "metadata";
+    probe.addEventListener("loadedmetadata", () => {
+      if (session === playSession && isFinite(probe.duration) && probe.duration > 0) {
+        knownDuration = probe.duration;
       }
-      if (done) {
-        streamDone = true;
-        pump();
-        return;
+      postState();
+    }, { once: true });
+    probe.src = fullBlobUrl;
+    postState();  // surface canDownload immediately (duration follows from the probe)
+  }
+
+  // Replace the windowed MediaSource with the complete file so the user can seek
+  // anywhere, including audio we'd evicted. One-way (synthesis is finished); from
+  // here on the element plays a plain file with native seeking and true duration.
+  function swapToFullFile(targetTime) {
+    const wasPlaying = !audio.paused && !audio.ended;
+    const prev = objectUrl;
+    objectUrl = fullBlobUrl;  // keep fullBlobUrl pointing here too (download source)
+    mediaSource = null;
+    sourceBuffer = null;
+    allChunks = [];
+    appendCursor = 0;
+    const onMeta = () => {
+      audio.removeEventListener("loadedmetadata", onMeta);
+      try { audio.currentTime = targetTime; } catch (e) {}
+      if (wasPlaying) audio.play().catch(() => {});
+    };
+    audio.addEventListener("loadedmetadata", onMeta);
+    audio.src = objectUrl;
+    audio.load();
+    if (prev && prev !== objectUrl) URL.revokeObjectURL(prev);
+  }
+
+  // Save the assembled complete MP3 via a download. `title` is the page title,
+  // used (sanitized) as the filename. Available once canDownload is true.
+  function download(title) {
+    if (!fullBlobUrl) return;
+    const base = (title || "audio-reader")
+      .replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 100) || "audio-reader";
+    const a = document.createElement("a");
+    a.href = fullBlobUrl;
+    a.download = base + ".mp3";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  // Read the whole stream into the heap as fast as it yields (the windowed
+  // appender, not this loop, bounds memory), then mark it done + assemble the
+  // full file. Bails immediately if a newer session supersedes this one.
+  async function readLoop(reader, session) {
+    try {
+      while (true) {
+        if (session !== playSession) { try { reader.cancel(); } catch (e) {} return; }
+        const { done, value } = await reader.read();
+        if (session !== playSession) { try { reader.cancel(); } catch (e) {} return; }
+        if (done) {
+          streamDone = true;
+          buildFullBlob(session);
+          // If the user seeked outside the live window during generation, the
+          // complete file is ready now — switch to it so they're not left stalled
+          // on audio the window never held.
+          if (fullBlobUrl && sourceBuffer && !playheadInWindow()) {
+            swapToFullFile(audio.currentTime || 0);
+          } else {
+            feedWindow();
+          }
+          return;
+        }
+        allChunks.push(value);
+        feedWindow();
       }
-      queue.push(value);
-      pump();
-      readLoop(reader, session);
-    }).catch(() => {
+    } catch (e) {
       if (session !== playSession) return;
       streamDone = true;
-      pump();  // close out MediaSource so buffered audio finishes instead of hanging in "buffering"
+      buildFullBlob(session);  // partial file — what was generated stays seekable
+      feedWindow();  // close out so buffered audio finishes instead of hanging
       postState({ error: "Audio stream interrupted." });
-    });
+    }
   }
 
   // --- Public feed API ----------------------------------------------------
@@ -155,10 +319,23 @@ export function createPlayer() {
       postState({ error: "Could not create audio buffer: " + e.message });
       return;
     }
-    sourceBuffer.addEventListener("updateend", pump);
+    // Lay each appended chunk immediately after the previous one instead of
+    // trusting the parsed MP3 frame timestamps. In the default "segments" mode,
+    // tiny timestamp discontinuities at append boundaries leave sub-frame gaps in
+    // the buffered timeline; Chrome then "gap-jumps" across them during playback —
+    // heard as a brief crackle followed by a small forward skip, dropping the
+    // audio inside the gap. "sequence" mode guarantees one contiguous range, so
+    // there is nothing to jump.
+    try { sourceBuffer.mode = "sequence"; } catch (e) { /* mode unsupported */ }
+    sourceBuffer.addEventListener("updateend", feedWindow);
+    sourceBuffer.addEventListener("updateend", warnOnBufferGap);
 
     streamDone = false;
-    queue = [];
+    allChunks = [];
+    appendCursor = 0;
+    canDownload = false;
+    knownDuration = 0;
+    if (fullBlobUrl) { URL.revokeObjectURL(fullBlobUrl); fullBlobUrl = null; }
 
     readLoop(stream.getReader(), session);
   }
@@ -184,6 +361,9 @@ export function createPlayer() {
         desiredRate = value;
         audio.playbackRate = value;
         break;
+      case "download":
+        download(value);
+        break;
       case "stop":
         stop();
         break;
@@ -198,11 +378,15 @@ export function createPlayer() {
     } catch (e) {}
     try { audio.removeAttribute("src"); audio.load(); } catch (e) {}
     if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+    if (fullBlobUrl) { URL.revokeObjectURL(fullBlobUrl); fullBlobUrl = null; }
     mediaSource = null;
     sourceBuffer = null;
-    queue = [];
+    allChunks = [];
+    appendCursor = 0;
     streamDone = false;
     started = false;
+    canDownload = false;
+    knownDuration = 0;
   }
 
   return { playMpegStream, control, stop, report, setStateExtra };

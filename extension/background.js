@@ -8,6 +8,29 @@ const DEFAULTS = { serverUrl: "http://localhost:8880", voice: "af_heart", speed:
 // The single active reading session, or null. { tabId }
 let session = null;
 
+// The service worker can be terminated during a long model load (no messages for
+// 30s), then woken by the offscreen player's OFFSCREEN_STATE updates — which carry
+// no sender tab. A fresh worker's in-memory `session` is null, so every state
+// update would be dropped and the bar would freeze at its last status. Mirror the
+// session into chrome.storage.session (in-memory, survives SW restarts within the
+// browser session) so a restarted worker can recover the tab before forwarding.
+function persistSession() {
+  chrome.storage.session.set({ activeSession: session }).catch(() => {});
+}
+
+async function restoreSession() {
+  if (session) return session;
+  try {
+    const { activeSession } = await chrome.storage.session.get("activeSession");
+    if (activeSession && activeSession.tabId != null) session = activeSession;
+  } catch (e) {}
+  return session;
+}
+
+function clearPersistedSession() {
+  chrome.storage.session.remove("activeSession").catch(() => {});
+}
+
 async function getConfig() {
   const stored = await chrome.storage.sync.get(DEFAULTS);
   return { ...DEFAULTS, ...stored };
@@ -134,6 +157,7 @@ async function startReading(tabId, rawText) {
   // If a previous session was running in a different tab, hide its bar.
   if (session && session.tabId !== tabId) toTab(session.tabId, { type: "HIDE_PLAYER" });
   session = { tabId };
+  persistSession();
 
   const voices = await getVoices(base);
   toTab(tabId, { type: "SHOW_PLAYER", voices, voice: cfg.voice, speed: cfg.speed });
@@ -151,6 +175,7 @@ function stopSession({ hideBar = true } = {}) {
   toOffscreen({ type: "OFFSCREEN_CONTROL", action: "stop" });
   if (session && hideBar) toTab(session.tabId, { type: "HIDE_PLAYER" });
   session = null;
+  clearPersistedSession();
   clearEngineBadge();
 }
 
@@ -208,25 +233,30 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 // --- Message routing ------------------------------------------------------
 
+// Forward a player state update to the active bar, recovering the session from
+// storage first if the worker was restarted (OFFSCREEN_STATE carries no sender).
+async function forwardOffscreenState(state) {
+  await restoreSession();
+  if (!session) return;
+  toTab(session.tabId, { type: "STATE", state });
+  if (state.ended) clearEngineBadge();
+  else if (state.engine) setEngineBadge(state.engine);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender) => {
   // State updates coming back from the offscreen player.
   if (msg.type === "OFFSCREEN_STATE") {
-    if (session) {
-      toTab(session.tabId, { type: "STATE", state: msg.state });
-      if (msg.state.ended) clearEngineBadge();
-      else if (msg.state.engine) setEngineBadge(msg.state.engine);
-    }
+    forwardOffscreenState(msg.state);
     return;
   }
 
   if (!sender.tab) return;
 
-  // The service worker may have been terminated during a long pause, dropping the
-  // in-memory session. Every CONTROL/SET_VOICE message originates from the active
-  // bar's tab, so recover the session→tab mapping from the sender. Without this,
-  // OFFSCREEN_STATE updates (which carry no sender.tab) would stop reaching the
-  // bar after the worker restarts and it would look frozen even while audio plays.
-  if (!session) session = { tabId: sender.tab.id };
+  // The service worker may have been terminated during a long pause/load, dropping
+  // the in-memory session. Every CONTROL/SET_VOICE message originates from the
+  // active bar's tab, so recover the session→tab mapping from the sender (and
+  // re-persist it) as a fast path alongside the storage-backed restore above.
+  if (!session) { session = { tabId: sender.tab.id }; persistSession(); }
 
   // Control commands coming from the in-page bar (content script).
   if (msg.type === "CONTROL") {

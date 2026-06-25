@@ -3,6 +3,9 @@
 // offscreen audio session -> relay control/state messages between the in-page
 // control bar (content script) and the offscreen player.
 
+// Built-in Kokoro voice catalog + mergeVoices() — shared with the options page.
+importScripts("voices.js");
+
 const DEFAULTS = { serverUrl: "http://localhost:8880", voice: "af_heart", speed: 1.0, engine: "auto" };
 
 // The single active reading session, or null. { tabId }
@@ -36,25 +39,26 @@ async function getConfig() {
   return { ...DEFAULTS, ...stored };
 }
 
-// Voice list, cached per server URL. Fetched from the extension context so the
-// page's CSP can't block it.
+// Voice list, cached per server URL. The built-in Kokoro catalog is always
+// offered (the in-browser engines never reach the server), with any server-
+// reported voices merged on top when reachable. Fetched from the extension
+// context so the page's CSP can't block it.
 let voicesCache = { url: null, list: [] };
 
 async function getVoices(base) {
   if (voicesCache.url === base && voicesCache.list.length) return voicesCache.list;
+  let serverVoices = [];
   try {
     const resp = await fetch(base + "/v1/audio/voices");
     const data = await resp.json();
     const raw = data.voices || data;
-    const list = raw
-      .map((v) => (typeof v === "string" ? v : v.id || v.name))
-      .filter(Boolean)
-      .sort();
-    voicesCache = { url: base, list };
-    return list;
+    serverVoices = raw.map((v) => (typeof v === "string" ? v : v.id || v.name)).filter(Boolean);
   } catch {
-    return [];
+    // Server unreachable — fall back to the built-in catalog alone.
   }
+  const list = mergeVoices(serverVoices);
+  voicesCache = { url: base, list };
+  return list;
 }
 
 // --- Offscreen document (the actual audio player) -------------------------

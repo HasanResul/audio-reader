@@ -1,7 +1,7 @@
 ---
 status: completed
 created: 260618
-updated: 260618
+updated: 260625
 ---
 
 # Browser TTS engine + multi-engine selection
@@ -207,3 +207,11 @@ extension-store publishing.
   `webgpu-spike/` deleted (~466MB incl. its node_modules); its proven patterns live in
   `extension/src/browser-engine-entry.js`. Experiment `plan.md` annotated with the retirement so its
   pointer doesn't dangle. Plan status → completed.
+- **260625 — Follow-up fix: voice picker no longer requires the server.** Bug: the voice list (options page
+  *and* control bar) was sourced only from the server's `/v1/audio/voices`. When running an in-browser
+  engine (WebGPU/WASM) — which never touches the server — with no server up, the list collapsed to the one
+  saved voice ("server unreachable"), so the user couldn't pick any of the 28 voices the in-browser engine
+  ships. Fix: new `extension/voices.js` exports the built-in Kokoro catalog (`KOKORO_VOICES`, extracted from
+  `kokoro-js`) + `mergeVoices()`; `background.js` (`importScripts`) and `options.js`/`options.html` now always
+  offer the built-in catalog and *merge* server-reported voices on top when reachable. List is never empty.
+  Voice change still applies to the next reading (unchanged; already user-informed via toast).

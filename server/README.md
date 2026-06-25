@@ -36,6 +36,9 @@ docker restart kokoro-tts
 docker logs --tail 50 kokoro-tts
 
 # list voices
+# The extension already ships Kokoro's built-in voice catalog, so the picker works
+# without this server. This endpoint only adds any *custom* voices the server exposes
+# (merged on top of the built-ins when reachable).
 curl -s http://localhost:8880/v1/audio/voices | python3 -m json.tool
 
 # recreate from scratch (if the container is lost)

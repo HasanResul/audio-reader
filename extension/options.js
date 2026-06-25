@@ -18,28 +18,34 @@ async function loadVoices(selected) {
   const sel = $("voice");
   const hint = $("voiceHint");
   sel.innerHTML = "";
+
+  // The built-in Kokoro catalog is always available (the in-browser engines use
+  // it directly); any server-reported voices are merged on top when reachable.
+  let serverVoices = [];
+  let serverOk = false;
   try {
     const resp = await fetch(base() + "/v1/audio/voices");
     const data = await resp.json();
     const raw = data.voices || data;
-    const ids = raw.map((v) => (typeof v === "string" ? v : v.id || v.name)).filter(Boolean).sort();
-    for (const id of ids) {
-      const opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = id;
-      sel.appendChild(opt);
-    }
-    if (selected && ids.includes(selected)) sel.value = selected;
-    else if (ids.includes(DEFAULTS.voice)) sel.value = DEFAULTS.voice;
-    hint.textContent = ids.length + " voices loaded from the server.";
+    serverVoices = raw.map((v) => (typeof v === "string" ? v : v.id || v.name)).filter(Boolean);
+    serverOk = true;
   } catch (e) {
-    // Server unreachable — keep whatever is saved so the user isn't stuck.
-    const opt = document.createElement("option");
-    opt.value = selected || DEFAULTS.voice;
-    opt.textContent = (selected || DEFAULTS.voice) + " (server unreachable)";
-    sel.appendChild(opt);
-    hint.textContent = "Couldn't reach the server to list voices. Start it, then Reload voices.";
+    // Server unreachable — fall back to the built-in catalog alone.
   }
+
+  const ids = mergeVoices(serverVoices);
+  for (const id of ids) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = id;
+    sel.appendChild(opt);
+  }
+  if (selected && ids.includes(selected)) sel.value = selected;
+  else if (ids.includes(DEFAULTS.voice)) sel.value = DEFAULTS.voice;
+
+  hint.textContent = serverOk
+    ? ids.length + " voices available (built-in + server)."
+    : ids.length + " built-in voices. Start the server and Reload to add any custom voices.";
 }
 
 // --- Engine picker: live availability gates which engines are selectable ---

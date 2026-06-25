@@ -1,7 +1,7 @@
 ---
 status: active
 created: 260617
-updated: 260617_phase2
+updated: 260625
 ---
 
 # Audio Reader MVP — Local TTS Read-Aloud for Brave
@@ -107,7 +107,7 @@ Quality-vs-hosted-demo: **user signed off (260617)** — `af_heart` samples judg
 - **Streaming via MediaSource:** the offscreen doc issues ONE `POST /v1/audio/speech` with `stream:true, response_format:mp3` and pipes the `ReadableStream` chunks into a `SourceBuffer('audio/mpeg')`. This leans on the server-side sentence-boundary chunked streaming we *proved* in Phase 0 (98 progressive chunks) — so playback starts ~1s in and the whole selection is one seekable timeline. No client-side chunking needed for Phase 1; the plan's "start before fully synthesized" requirement is met by server streaming + MSE.
 - **Speed = client-side `playbackRate`** (pitch preserved), so changing speed is instant with no re-synthesis. The server `speed` param is left at 1.0.
 - Message flow: content-bar → service worker → offscreen (controls); offscreen → service worker → content-bar (state). Trigger grabs selection via `chrome.scripting.executeScript` (command path) or `info.selectionText` (context-menu path). Session auto-stops on tab close / navigation.
-- Config in `chrome.storage.sync`: `serverUrl` (default `http://localhost:8880`), `voice` (`af_heart`, list loaded live from `/v1/audio/voices`), `speed`. Pointing `serverUrl` elsewhere = the carried Chatterbox/quality-mode hook, no code change.
+- Config in `chrome.storage.sync`: `serverUrl` (default `http://localhost:8880`), `voice` (`af_heart`; the picker offers Kokoro's built-in catalog and merges any server `/v1/audio/voices` on top when reachable — see the 260625 fix in `docs/plans/260618_browser-tts-engine.md`), `speed`. Pointing `serverUrl` elsewhere = the carried Chatterbox/quality-mode hook, no code change.
 
 **Files:** `extension/` — `manifest.json` (MV3), `background.js` (SW), `offscreen.{html,js}` (player), `content.js` (Shadow-DOM bar), `options.{html,js}` (settings), `popup.{html,js}` (status/help), `README.md` (load + manual-test steps). Tracked in git (real project code, not under `local/`).
 

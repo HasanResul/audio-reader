@@ -1,2 +1,3 @@
 docs:
   260617_audio-reader-design.md: Brave extension + local OpenAI-compatible TTS server; Kokoro default, Chatterbox quality mode (kind: design, status: draft)
+  260625_playback-stall-under-memory-pressure.md: in-browser playback stalls partway and won't resume; proactive full-file swap fired but audio still didn't play — rules out MediaSource buffer eviction (kind: analyze, status: draft)

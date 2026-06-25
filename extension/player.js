@@ -97,19 +97,29 @@ export function createPlayer() {
   });
   audio.addEventListener("error", () => postState({ error: "Audio playback failed." }));
 
-  // Advance the buffer window as the playhead moves: append more ahead, evict
-  // behind. (Replaces read-side backpressure — reading now fills the heap fast.)
-  audio.addEventListener("timeupdate", () => feedWindow());
+  // Advance the buffer window as the playhead moves (append ahead, evict behind),
+  // then — once synthesis is complete — proactively switch to the assembled file.
+  // The MediaSource window is only needed while still generating; staying on it
+  // afterwards is fragile (under memory pressure Chrome evicts buffered data,
+  // hanging playback inside a hidden offscreen document whose timers are throttled
+  // so it can't reliably self-recover). A plain blob-backed element re-decodes
+  // from its own in-memory source, so it can't dead-end. See maybeSwapToFullFile.
+  audio.addEventListener("timeupdate", () => { feedWindow(); maybeSwapToFullFile(); });
 
   // If the user seeks to audio that's left the window but was already generated,
-  // switch to the complete file (assembled at synthesis end) and seek there —
-  // full, native, seamless seeking from then on.
+  // switch to the complete file (assembled at synthesis end) and seek there.
   audio.addEventListener("seeking", () => {
     if (!sourceBuffer) return;        // already on the full file — native seek
     if (playheadInWindow()) return;   // normal in-window MediaSource seek
     if (fullBlobUrl) { swapToFullFile(audio.currentTime || 0); return; }
     feedWindow();  // still generating: let the window refill toward the target
   });
+
+  // As a fast backstop for the brief window between "synthesis done" and the
+  // proactive swap, also recover if the element reports a stall there.
+  const recoverFromStall = () => { if (sourceBuffer) maybeSwapToFullFile(); };
+  audio.addEventListener("waiting", recoverFromStall);
+  audio.addEventListener("stalled", recoverFromStall);
 
   // --- MediaSource plumbing (streaming MP3 path) --------------------------
 
@@ -184,6 +194,9 @@ export function createPlayer() {
     if (streamDone && appendCursor >= allChunks.length &&
         mediaSource && mediaSource.readyState === "open") {
       try { mediaSource.endOfStream(); } catch (e) { /* already ended */ }
+      // Everything is buffered and the complete file exists; drop the heap copy
+      // (seek-out and stall-recovery use the assembled file, not these chunks).
+      if (fullBlobUrl && allChunks.length) { allChunks = []; appendCursor = 0; }
     }
   }
 
@@ -211,10 +224,21 @@ export function createPlayer() {
     postState();  // surface canDownload immediately (duration follows from the probe)
   }
 
-  // Replace the windowed MediaSource with the complete file so the user can seek
-  // anywhere, including audio we'd evicted. One-way (synthesis is finished); from
-  // here on the element plays a plain file with native seeking and true duration.
+  // Once synthesis is complete and playback is underway, move off the fragile
+  // windowed MediaSource onto the assembled file. Triggered from timeupdate so we
+  // know playback has started; `started` guards the pre-playback window where a
+  // very short clip finishes synthesizing before the first chunk has played.
+  function maybeSwapToFullFile() {
+    if (streamDone && started && fullBlobUrl && sourceBuffer && !audio.ended) {
+      swapToFullFile(audio.currentTime || 0);
+    }
+  }
+
+  // Replace the windowed MediaSource with the complete file so playback is robust
+  // (a blob-backed element re-decodes from its in-memory source and can't be
+  // evicted into a dead-end) and seeking is native. One-way (synthesis finished).
   function swapToFullFile(targetTime) {
+    console.info("[audio-reader] switched playback to the complete file");
     const wasPlaying = !audio.paused && !audio.ended;
     const prev = objectUrl;
     objectUrl = fullBlobUrl;  // keep fullBlobUrl pointing here too (download source)
@@ -259,14 +283,8 @@ export function createPlayer() {
         if (done) {
           streamDone = true;
           buildFullBlob(session);
-          // If the user seeked outside the live window during generation, the
-          // complete file is ready now — switch to it so they're not left stalled
-          // on audio the window never held.
-          if (fullBlobUrl && sourceBuffer && !playheadInWindow()) {
-            swapToFullFile(audio.currentTime || 0);
-          } else {
-            feedWindow();
-          }
+          feedWindow();          // finish appending the tail / close the stream
+          maybeSwapToFullFile(); // and move onto the solid file if already playing
           return;
         }
         allChunks.push(value);

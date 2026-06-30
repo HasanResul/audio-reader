@@ -172,7 +172,17 @@ export const browserEngine = {
 
   async synthesize(msg, player) {
     const run = beginRun();
-    const text = (msg.text || "").trim();
+    // Collapse all whitespace runs to single spaces before handing the text to
+    // kokoro-js. kokoro-js@1.2.1's TextSplitterStream._process infinite-loops on a
+    // newline placed immediately after an "@mention"/URL token (e.g. the
+    // "\n@ChrisGillett\n" that x.com yields when a mention link is selected): its
+    // URL-skip branch sets r = l + c.length, which lands back on that same newline
+    // because the token ends exactly there, so the scan never advances. The loop is
+    // synchronous, so it freezes the whole offscreen document with no error. Newlines
+    // carry no audible meaning for TTS (kokoro still splits sentences on .!?), so
+    // flattening them is both the fix and harmless. See also the server engine, which
+    // is unaffected (the FastAPI server does its own normalization).
+    const text = (msg.text || "").replace(/\s+/g, " ").trim();
     const { device, dtype, indicator } = profileFor(msg.engine);
 
     player.setStateExtra({ engine: indicator });
